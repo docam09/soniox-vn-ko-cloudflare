@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local development. Never commit the real key.
+SONIOX_API_KEY=your_soniox_api_key_here
