@@ -39,6 +39,8 @@ type DictionaryState = {
   terms: DictionaryTerm[]
 }
 
+type DictionarySyncState = 'loading' | 'saving' | 'saved' | 'offline'
+
 const EMPTY_DRAFT: LiveDraft = { sourceText: '', targetText: '', sourceLang: null }
 const STORAGE_KEY = 'soniox-vn-ko-history-v1'
 const DICTIONARY_STORAGE_KEY = 'soniox-vn-ko-dictionary-v1'
@@ -153,6 +155,44 @@ function loadDictionary(): DictionaryState {
   return { context: '', terms: [] }
 }
 
+function parseDictionary(value: unknown): DictionaryState | null {
+  if (!value || typeof value !== 'object') return null
+  const parsed = value as Partial<DictionaryState>
+  const context = typeof parsed.context === 'string' ? parsed.context.slice(0, MAX_CONTEXT_LENGTH) : ''
+  const terms = Array.isArray(parsed.terms)
+    ? parsed.terms
+        .filter((value): value is DictionaryTerm => {
+          if (!value || typeof value !== 'object') return false
+          const term = value as Partial<DictionaryTerm>
+          return typeof term.id === 'string' && typeof term.vi === 'string' && typeof term.ko === 'string' && typeof term.createdAt === 'string'
+        })
+        .map((term) => ({ ...term, vi: term.vi.slice(0, MAX_TERM_LENGTH), ko: term.ko.slice(0, MAX_TERM_LENGTH) }))
+        .filter((term) => term.vi.trim() && term.ko.trim())
+        .slice(0, MAX_DICTIONARY_TERMS)
+    : []
+  return { context, terms }
+}
+
+async function fetchDictionary(): Promise<DictionaryState | null> {
+  const response = await fetch('/api/dictionary', { cache: 'no-store' })
+  const payload = (await response.json()) as { dictionary?: unknown; error?: string }
+  if (!response.ok) throw new Error(payload.error || `Không tải được từ điển (${response.status}).`)
+  return parseDictionary(payload.dictionary)
+}
+
+async function saveDictionary(dictionary: DictionaryState, signal?: AbortSignal): Promise<void> {
+  const response = await fetch('/api/dictionary', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dictionary),
+    signal,
+  })
+  if (!response.ok) {
+    const payload = (await response.json()) as { error?: string }
+    throw new Error(payload.error || `Không lưu được từ điển (${response.status}).`)
+  }
+}
+
 async function fetchSession(dictionary: DictionaryState): Promise<SonioxSession> {
   const terms = dictionary.terms.map(({ vi, ko }) => ({ vi, ko }))
   const response = await fetch('/api/soniox/session', {
@@ -165,23 +205,12 @@ async function fetchSession(dictionary: DictionaryState): Promise<SonioxSession>
   return payload
 }
 
-let activeUtterance: SpeechSynthesisUtterance | null = null
-
-function speak(text: string, language: LanguageCode, handle: LiveHandle | null): void {
+function speak(text: string, language: LanguageCode): void {
   if (!text || !('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
-  activeUtterance = utterance
   utterance.lang = language === 'vi' ? 'vi-VN' : 'ko-KR'
   utterance.rate = 0.96
-  utterance.onstart = () => handle?.pause()
-  const finish = () => {
-    if (activeUtterance !== utterance) return
-    activeUtterance = null
-    handle?.resume()
-  }
-  utterance.onend = finish
-  utterance.onerror = finish
   window.speechSynthesis.speak(utterance)
 }
 
@@ -196,15 +225,14 @@ export default function App() {
   const [dictionaryError, setDictionaryError] = useState('')
   const [error, setError] = useState('')
   const [storageWarning, setStorageWarning] = useState('')
-  const [autoSpeak, setAutoSpeak] = useState(true)
+  const [dictionaryReady, setDictionaryReady] = useState(false)
+  const [dictionarySyncState, setDictionarySyncState] = useState<DictionarySyncState>('loading')
   const handleRef = useRef<LiveHandle | null>(null)
-  const autoSpeakRef = useRef(autoSpeak)
 
   const sessions = useMemo(() => sortSessions(history.sessions), [history.sessions])
   const activeSession = history.sessions.find((session) => session.id === history.activeSessionId) ?? sessions[0]
   const displayedTurns = useMemo(() => [...(activeSession?.turns ?? [])].reverse(), [activeSession])
 
-  useEffect(() => { autoSpeakRef.current = autoSpeak }, [autoSpeak])
   useEffect(() => () => handleRef.current?.cancel(), [])
 
   useEffect(() => {
@@ -223,7 +251,44 @@ export default function App() {
     } catch {
       setStorageWarning('Không thể lưu dữ liệu trên thiết bị này. Hãy kiểm tra chế độ riêng tư hoặc dung lượng trình duyệt.')
     }
-  }, [dictionary])
+    if (!dictionaryReady) return
+    setDictionarySyncState('saving')
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      void saveDictionary(dictionary, controller.signal)
+        .then(() => setDictionarySyncState('saved'))
+        .catch((saveError: unknown) => {
+          if (saveError instanceof DOMException && saveError.name === 'AbortError') return
+          setDictionarySyncState('offline')
+        })
+    }, 600)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [dictionary, dictionaryReady])
+
+  useEffect(() => {
+    let cancelled = false
+    const localDictionary = loadDictionary()
+    void fetchDictionary()
+      .then(async (remoteDictionary) => {
+        if (cancelled) return
+        if (remoteDictionary) {
+          setDictionary(remoteDictionary)
+        } else {
+          await saveDictionary(localDictionary)
+        }
+        if (!cancelled) setDictionarySyncState('saved')
+      })
+      .catch(() => {
+        if (!cancelled) setDictionarySyncState('offline')
+      })
+      .finally(() => {
+        if (!cancelled) setDictionaryReady(true)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     const syncStorage = (event: StorageEvent) => {
@@ -284,13 +349,9 @@ export default function App() {
   const start = () => {
     setError('')
     setDraft(EMPTY_DRAFT)
-    if ('speechSynthesis' in window) window.speechSynthesis.speak(new SpeechSynthesisUtterance(''))
     const handle = startLiveInterpreter(() => fetchSession(dictionary), {
       onDraft: setDraft,
-      onTurn: (turn) => {
-        addTurn(turn)
-        if (autoSpeakRef.current) speak(turn.targetText, turn.targetLang, handleRef.current)
-      },
+      onTurn: addTurn,
       onError: (message) => {
         setError(message)
         setStatus('stopped')
@@ -366,10 +427,6 @@ export default function App() {
         <button className={`dictionary-toggle ${dictionaryOpen ? 'active' : ''}`} onClick={() => setDictionaryOpen((open) => !open)} aria-expanded={dictionaryOpen}>
           Từ điển <span>{dictionary.terms.length}</span>
         </button>
-        <label className="toggle">
-          <input type="checkbox" checked={autoSpeak} onChange={(event) => setAutoSpeak(event.target.checked)} />
-          <span />Tự đọc bản dịch
-        </label>
         <button className="ghost" onClick={clearSession} disabled={status !== 'stopped' || !activeSession?.turns.length}>Xóa phiên đang mở</button>
       </section>
 
@@ -381,7 +438,12 @@ export default function App() {
               <h2>Từ điển chuyên ngành</h2>
               <p>Thêm các cặp thuật ngữ Việt – Hàn. Soniox sẽ ưu tiên nhận diện và dịch theo danh sách này khi bắt đầu phiên tiếp theo.</p>
             </div>
-            <span className="saved-badge">Đã lưu trên thiết bị</span>
+            <span className={`saved-badge sync-${dictionarySyncState}`}>
+              {dictionarySyncState === 'loading' ? 'Đang tải online'
+                : dictionarySyncState === 'saving' ? 'Đang lưu online'
+                  : dictionarySyncState === 'saved' ? 'Đã lưu online'
+                    : 'Chưa đồng bộ online'}
+            </span>
           </div>
 
           <label className="context-field">
@@ -469,7 +531,7 @@ export default function App() {
                     <div><span>{languageName[turn.sourceLang]}</span><p>{turn.sourceText}</p></div>
                     <div className="translation"><span>{languageName[turn.targetLang]}</span><p>{turn.targetText}</p></div>
                   </div>
-                  <button className="play" aria-label="Đọc bản dịch" disabled={status !== 'stopped'} onClick={() => speak(turn.targetText, turn.targetLang, null)}>▶</button>
+                  <button className="play" aria-label="Đọc bản dịch" disabled={status !== 'stopped'} onClick={() => speak(turn.targetText, turn.targetLang)}>▶</button>
                 </article>
               ))}
             </div>
@@ -477,7 +539,7 @@ export default function App() {
         </section>
       </section>
 
-      <footer>Lịch sử và từ điển được lưu riêng trên trình duyệt của thiết bị này. Khóa Soniox chính vẫn được giữ trong Cloudflare.</footer>
+      <footer>Lịch sử được lưu trên thiết bị; từ điển được đồng bộ online qua Cloudflare. Khóa Soniox chính vẫn được giữ trong Cloudflare.</footer>
     </main>
   )
 }
