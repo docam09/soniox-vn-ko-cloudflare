@@ -58,6 +58,22 @@ function isLanguage(value: string | undefined): value is LanguageCode {
   return value === 'vi' || value === 'ko'
 }
 
+export function normalizeVietnameseTranslation(text: string): string {
+  return text.replace(
+    /(^|[^\p{L}\p{N}_])(mày|tao)(?=$|[^\p{L}\p{N}_])/giu,
+    (_match, prefix: string, pronoun: string) => {
+      const politePronoun = pronoun.toLocaleLowerCase('vi') === 'mày' ? 'bạn' : 'tôi'
+      if (pronoun === pronoun.toLocaleUpperCase('vi')) {
+        return `${prefix}${politePronoun.toLocaleUpperCase('vi')}`
+      }
+      if (pronoun[0] === pronoun[0].toLocaleUpperCase('vi')) {
+        return `${prefix}${politePronoun[0].toLocaleUpperCase('vi')}${politePronoun.slice(1)}`
+      }
+      return `${prefix}${politePronoun}`
+    },
+  )
+}
+
 function join(tokens: RealtimeToken[]): string {
   return tokens.map((token) => token.text).join('').trim()
 }
@@ -90,14 +106,17 @@ class TurnAssembler {
     for (const token of this.finalOriginal) if (isLanguage(token.language)) return token.language
     for (const token of this.draftOriginal) if (isLanguage(token.language)) return token.language
     for (const token of this.finalTranslation) if (isLanguage(token.source_language)) return token.source_language
+    for (const token of this.draftTranslation) if (isLanguage(token.source_language)) return token.source_language
     return null
   }
 
   draft(): LiveDraft {
+    const sourceLang = this.language()
+    const targetText = join([...this.finalTranslation, ...this.draftTranslation])
     return {
       sourceText: join([...this.finalOriginal, ...this.draftOriginal]),
-      targetText: join([...this.finalTranslation, ...this.draftTranslation]),
-      sourceLang: this.language(),
+      targetText: sourceLang === 'ko' ? normalizeVietnameseTranslation(targetText) : targetText,
+      sourceLang,
     }
   }
 
@@ -118,11 +137,12 @@ class TurnAssembler {
     const sourceLang = this.language()
     this.reset()
     if (!sourceText || !targetText || !sourceLang) return null
+    const targetLang = sourceLang === 'vi' ? 'ko' : 'vi'
     return {
       sourceLang,
-      targetLang: sourceLang === 'vi' ? 'ko' : 'vi',
+      targetLang,
       sourceText,
-      targetText,
+      targetText: targetLang === 'vi' ? normalizeVietnameseTranslation(targetText) : targetText,
     }
   }
 }

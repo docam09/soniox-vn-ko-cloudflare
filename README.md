@@ -1,6 +1,6 @@
 # Soniox Việt ↔ Hàn trên Cloudflare
 
-Ứng dụng phiên dịch giọng nói hai chiều Việt Nam–Hàn Quốc theo thời gian thực. Frontend React và Cloudflare Worker được triển khai chung bằng Workers Static Assets. Soniox thực hiện nhận dạng giọng nói, nhận diện ngôn ngữ và dịch trực tiếp qua WebSocket.
+Ứng dụng phiên dịch giọng nói hai chiều Việt Nam–Hàn Quốc theo thời gian thực. Frontend React và Cloudflare Worker được triển khai chung bằng Workers Static Assets. Soniox thực hiện nhận dạng giọng nói, nhận diện ngôn ngữ và dịch trực tiếp qua WebSocket. Từ điển chuyên ngành được đồng bộ qua Cloudflare KV để dùng chung trên nhiều thiết bị và địa chỉ IP.
 
 ## Kiến trúc
 
@@ -8,6 +8,9 @@
 2. Cloudflare Worker dùng secret `SONIOX_API_KEY` để tạo temporary key có thời hạn 120 giây.
 3. Trình duyệt dùng temporary key để kết nối trực tiếp tới Soniox WebSocket.
 4. API key chính không bao giờ xuất hiện trong frontend hoặc GitHub.
+5. Cloudflare KV lưu một từ điển dùng chung; lịch sử hội thoại vẫn chỉ lưu trên từng trình duyệt.
+
+Ứng dụng buộc bản dịch dùng đại từ lịch sự, trung tính; bản dịch tiếng Việt không dùng `mày` hoặc `tao` mà ưu tiên `bạn`, `anh/chị` và `tôi` theo ngữ cảnh. Bản dịch không tự phát âm; người dùng vẫn có thể bấm nút phát ở từng lượt đã lưu.
 
 ## Chạy local
 
@@ -37,6 +40,8 @@ Mở URL do Wrangler hiển thị. Trình duyệt cần quyền sử dụng micr
 ```bash
 npm install
 npx wrangler login
+npx wrangler kv namespace create DICTIONARY
+# Chép id namespace vào binding DICTIONARY trong wrangler.jsonc.
 npx wrangler secret put SONIOX_API_KEY
 npm run deploy
 ```
@@ -45,8 +50,10 @@ Không đặt khóa thật trong `.env`, `.dev.vars.example`, `wrangler.jsonc` h
 
 ## API
 
-- `GET /api/healthz` — trạng thái Worker và secret.
-- `POST /api/soniox/session` — tạo temporary key + cấu hình phiên dịch hai chiều.
+- `GET /api/healthz` – trạng thái Worker và secret.
+- `GET /api/dictionary` – tải từ điển dùng chung.
+- `PUT /api/dictionary` – lưu từ điển dùng chung.
+- `POST /api/soniox/session` – tạo temporary key + cấu hình phiên dịch hai chiều.
 
 ## Chi phí
 
