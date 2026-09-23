@@ -106,6 +106,7 @@ class TurnAssembler {
     for (const token of this.finalOriginal) if (isLanguage(token.language)) return token.language
     for (const token of this.draftOriginal) if (isLanguage(token.language)) return token.language
     for (const token of this.finalTranslation) if (isLanguage(token.source_language)) return token.source_language
+    for (const token of this.draftTranslation) if (isLanguage(token.source_language)) return token.source_language
     return null
   }
 
