@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  normalizeVietnameseTranslation,
   startLiveInterpreter,
   type LanguageCode,
   type LiveDraft,
@@ -85,6 +86,12 @@ function isStoredTurn(value: unknown): value is StoredTurn {
   )
 }
 
+function normalizeTurn(turn: StoredTurn): StoredTurn {
+  if (turn.targetLang !== 'vi') return turn
+  const targetText = normalizeVietnameseTranslation(turn.targetText)
+  return targetText === turn.targetText ? turn : { ...turn, targetText }
+}
+
 function loadHistory(): HistoryState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -102,7 +109,7 @@ function loadHistory(): HistoryState {
                 Array.isArray(session.turns)
               )
             })
-            .map((session) => ({ ...session, turns: session.turns.filter(isStoredTurn) }))
+            .map((session) => ({ ...session, turns: session.turns.filter(isStoredTurn).map(normalizeTurn) }))
         : []
 
       if (sessions.length) {
@@ -335,7 +342,7 @@ export default function App() {
 
   const addTurn = (turn: LiveTurn) => {
     const now = new Date().toISOString()
-    const storedTurn: StoredTurn = { ...turn, id: makeId('turn'), createdAt: now }
+    const storedTurn = normalizeTurn({ ...turn, id: makeId('turn'), createdAt: now })
     setHistory((current) => ({
       activeSessionId: current.activeSessionId,
       sessions: sortSessions(current.sessions.map((session) =>
