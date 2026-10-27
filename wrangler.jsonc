@@ -1,14 +1,30 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "soniox-vn-ko-interpreter",
-  "main": "worker/index.ts",
+  "name": "cost",
+  "account_id": "c4ad9ddd5607e6cdf2334bba6b70d466",
+  "main": "worker/worker.mjs",
   "compatibility_date": "2026-09-15",
+  // ADMIN_PHONE, ADMIN_EMAIL, EMAIL_ACCESS_AUD and EMAIL_ACCESS_DOMAIN are set in the
+  // dashboard; keep_vars stops a deploy from deleting them. Secrets always persist.
+  "keep_vars": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    // Every request goes through the worker so assets stay behind the OTP login.
+    "run_worker_first": true
   },
+  "d1_databases": [
+    {
+      "binding": "ACCESS_DB",
+      "database_name": "cost-access",
+      "database_id": "2e52e595-b626-487a-8073-07c4b96b8a9b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "DICTIONARY", "id": "a177c931713740eba16c33ff4401706d" }
+  ],
   "observability": {
     "enabled": true
   }
