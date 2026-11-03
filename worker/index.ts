@@ -67,7 +67,7 @@ async function createSonioxSession(request: Request, env: Env): Promise<Response
     websocket_url: SONIOX_WS_URL,
     expires_in_seconds: KEY_TTL_SECONDS,
     config: {
-      model: 'stt-rt-v5', audio_format: 'auto', language_hints: ['vi', 'ko'],
+      model: 'stt-rt-v6', audio_format: 'auto', language_hints: ['vi', 'ko'],
       enable_language_identification: true, enable_endpoint_detection: true, max_endpoint_delay_ms: 1200,
       translation: { type: 'two_way', language_a: 'vi', language_b: 'ko' },
       context: {
