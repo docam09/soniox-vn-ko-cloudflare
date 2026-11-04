@@ -1,0 +1,59 @@
+{
+  "len": 62502,
+  "compat": "2026-09-15",
+  "flags": [],
+  "bindings": [
+    {
+      "database_id": "2e52e595-b626-487a-8073-07c4b96b8a9b",
+      "id": "2e52e595-b626-487a-8073-07c4b96b8a9b",
+      "name": "ACCESS_DB",
+      "type": "d1"
+    },
+    {
+      "name": "ADMIN_EMAIL",
+      "text": "dothaonhi0411@gmail.com",
+      "type": "plain_text"
+    },
+    {
+      "name": "ADMIN_PHONE",
+      "text": "+84971983305",
+      "type": "plain_text"
+    },
+    {
+      "name": "ASSETS",
+      "type": "assets"
+    },
+    {
+      "name": "DICTIONARY",
+      "namespace_id": "a177c931713740eba16c33ff4401706d",
+      "type": "kv_namespace"
+    },
+    {
+      "name": "EMAIL_ACCESS_AUD",
+      "text": "035ae0646dfec6aae8e609cf6d168bef9517dc77fb57a768998b4fea1be1ac09",
+      "type": "plain_text"
+    },
+    {
+      "name": "EMAIL_ACCESS_DOMAIN",
+      "text": "cost-dohuucam500.cloudflareaccess.com",
+      "type": "plain_text"
+    },
+    {
+      "name": "SONIOX_API_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "type": "secret_text"
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "TWILIO_VERIFY_SERVICE_SID",
+      "type": "secret_text"
+    }
+  ],
+  "version": "7482fc3d-328a-4e0f-ae5e-e2b3f79a8248"
+}
